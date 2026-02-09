@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>停车券后台</title></head>
+<body>
+<h3>创建停车券</h3>
+<input id="total" type="number" value="50"/>
+<input id="token" placeholder="Admin Token" value="dev_admin_token"/>
+<button onclick="create()">生成</button>
+<p id="msg"></p>
+<img id="qr" alt="voucher qrcode" style="max-width:320px;width:100%;height:auto;display:block"/>
+<a id="redeemLink" target="_blank" rel="noopener"></a>
+<script>
+async function create(){
+ const res = await fetch('/api/admin/voucher',{
+  method:'POST',
+  headers:{'Content-Type':'application/json','Authorization':'Bearer '+token.value},
+  body:JSON.stringify({total:Number(total.value)})
+ });
+ const d = await res.json();
+ if(!res.ok){
+  msg.textContent = d.error || '创建失败';
+  return;
+ }
+ msg.textContent = '创建成功：' + d.voucher.id + '（剩余 ' + d.voucher.remain + ' 次）';
+ qr.src = d.qrDataUrl;
+ redeemLink.href = d.redeemFullUrl;
+ redeemLink.textContent = d.redeemFullUrl;
+}
+</script>
+</body></html>

@@ -1,0 +1,20 @@
+{
+  "name": "parking-coupon",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "express": "^5.2.1",
+    "fs-extra": "^11.3.3",
+    "nanoid": "^5.1.6",
+    "qrcode": "^1.5.4"
+  }
+}

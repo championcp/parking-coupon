@@ -1,0 +1,34 @@
+<!doctype html>
+<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>使用停车券</title></head>
+<body>
+<input id="vid"/><button onclick="load()">加载</button>
+<p>展码（给收费员扫码）</p>
+<img id="qr" alt="voucher qrcode" style="max-width:320px;width:100%;height:auto;display:block"/>
+<p id="info"></p>
+<button onclick="use()">确认使用</button>
+<script>
+async function load(){
+ const id = vid.value.trim();
+ if (!id) return;
+ const r = await fetch('/api/voucher/'+encodeURIComponent(id));
+ const d = await r.json();
+ info.textContent = JSON.stringify(d);
+ if (r.ok && d.qrDataUrl) qr.src = d.qrDataUrl;
+ if (r.ok) fetch('/api/voucher/'+encodeURIComponent(id)+'/display',{method:'POST'});
+}
+async function use(){
+ const id = vid.value.trim();
+ if (!id) return;
+ const r = await fetch('/api/voucher/'+encodeURIComponent(id)+'/confirm',{method:'POST'});
+ const d = await r.json();
+ info.textContent = JSON.stringify(d);
+ if (r.ok && d.qrDataUrl) qr.src = d.qrDataUrl;
+}
+const qv = new URLSearchParams(location.search).get('v');
+if (qv) {
+  vid.value = qv;
+  load();
+}
+</script>
+</body></html>
