@@ -1,30 +1,421 @@
 <!doctype html>
-<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>停车券后台</title></head>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>停车券后台</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
 <body>
-<h3>创建停车券</h3>
-<input id="total" type="number" value="50"/>
-<input id="token" placeholder="Admin Token" value="dev_admin_token"/>
-<button onclick="create()">生成</button>
-<p id="msg"></p>
-<img id="qr" alt="voucher qrcode" style="max-width:320px;width:100%;height:auto;display:block"/>
-<a id="redeemLink" target="_blank" rel="noopener"></a>
+  <main class="page">
+    <section class="hero">
+      <h1 class="title">管理员后台</h1>
+      <p class="subtitle">登录后创建停车券二维码。固定账号：<b>qzadmin</b>。</p>
+    </section>
+
+    <section class="grid grid-2">
+      <article class="card" id="loginCard">
+        <h3>管理员登录</h3>
+        <form id="loginForm" class="grid">
+          <label>
+            <span class="field-label">账号</span>
+            <input id="username" type="text" value="qzadmin" autocomplete="username" required/>
+          </label>
+          <label>
+            <span class="field-label">密码</span>
+            <input id="password" type="password" placeholder="请输入管理员密码" autocomplete="current-password" required/>
+          </label>
+          <div class="actions">
+            <button class="btn btn-primary" type="submit" id="loginBtn">登录</button>
+          </div>
+        </form>
+        <div id="loginBanner" class="banner banner-error"></div>
+      </article>
+
+      <article class="card" id="workCard" style="display:none">
+        <div class="data-row">
+          <h3 style="margin:0">创建停车券</h3>
+          <span id="whoami" class="badge badge-ok"></span>
+        </div>
+
+        <div class="grid" style="margin-top:12px">
+          <label>
+            <span class="field-label">总次数</span>
+            <input id="total" type="number" value="50" min="1" max="9999" step="1"/>
+          </label>
+
+          <div class="actions">
+            <button class="btn btn-secondary" type="button" data-total="10">10 次</button>
+            <button class="btn btn-secondary" type="button" data-total="20">20 次</button>
+            <button class="btn btn-secondary" type="button" data-total="50">50 次</button>
+            <button class="btn btn-secondary" type="button" data-total="100">100 次</button>
+          </div>
+
+          <div class="actions">
+            <button class="btn btn-primary" id="createBtn" type="button">生成二维码</button>
+            <button class="btn btn-danger" id="logoutBtn" type="button">退出登录</button>
+          </div>
+        </div>
+
+        <div id="workBanner" class="banner"></div>
+      </article>
+    </section>
+
+    <section class="card" id="resultCard" style="display:none; margin-top:14px">
+      <h3 style="margin-top:0">生成结果</h3>
+      <div class="kv">
+        <div class="kv-item"><span class="muted">券号</span><b id="voucherId" class="mono">-</b></div>
+        <div class="kv-item"><span class="muted">剩余次数</span><b id="voucherRemain">-</b></div>
+        <div class="kv-item"><span class="muted">使用链接</span><a id="redeemLink" class="mono" href="#" target="_blank" rel="noopener">-</a></div>
+      </div>
+      <div class="actions" style="margin-top:12px">
+        <button class="btn btn-secondary" id="copyLinkBtn" type="button">复制链接</button>
+      </div>
+      <div class="qr-wrap">
+        <img id="qr" alt="voucher qrcode"/>
+      </div>
+      <p class="muted" style="margin:0">建议车主或收费员使用手机扫码打开使用页。</p>
+    </section>
+
+    <section class="card" id="historyCard" style="display:none; margin-top:14px">
+      <div class="data-row" style="margin-top:0; padding-top:0; border-top:none">
+        <h3 style="margin:0">历史停车券</h3>
+        <button class="btn btn-secondary" id="refreshHistoryBtn" type="button">刷新</button>
+      </div>
+
+      <div class="summary-grid">
+        <div class="summary-item"><span class="muted">总券数</span><b id="sumVoucherCount">0</b></div>
+        <div class="summary-item"><span class="muted">总发放次数</span><b id="sumIssued">0</b></div>
+        <div class="summary-item"><span class="muted">总已用次数</span><b id="sumUsed">0</b></div>
+        <div class="summary-item"><span class="muted">总剩余次数</span><b id="sumRemain">0</b></div>
+      </div>
+
+      <div class="history-toolbar">
+        <input id="historySearchInput" type="text" placeholder="按券号搜索，例如 VCH_20260210"/>
+        <button class="btn btn-secondary" id="historySearchBtn" type="button">查询</button>
+        <label class="muted" for="historyPageSize">每页</label>
+        <select id="historyPageSize">
+          <option value="10">10</option>
+          <option value="20">20</option>
+          <option value="50">50</option>
+        </select>
+      </div>
+
+      <div class="table-wrap">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>券号</th>
+              <th>创建时间</th>
+              <th>总次数</th>
+              <th>已用</th>
+              <th>剩余</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody"></tbody>
+        </table>
+      </div>
+
+      <div class="history-pagination">
+        <button class="btn btn-secondary" id="historyPrevBtn" type="button">上一页</button>
+        <span class="muted" id="historyPageInfo">第 1 / 1 页</span>
+        <button class="btn btn-secondary" id="historyNextBtn" type="button">下一页</button>
+      </div>
+      <div id="historyBanner" class="banner"></div>
+    </section>
+  </main>
+
 <script>
-async function create(){
- const res = await fetch('/api/admin/voucher',{
-  method:'POST',
-  headers:{'Content-Type':'application/json','Authorization':'Bearer '+token.value},
-  body:JSON.stringify({total:Number(total.value)})
- });
- const d = await res.json();
- if(!res.ok){
-  msg.textContent = d.error || '创建失败';
-  return;
- }
- msg.textContent = '创建成功：' + d.voucher.id + '（剩余 ' + d.voucher.remain + ' 次）';
- qr.src = d.qrDataUrl;
- redeemLink.href = d.redeemFullUrl;
- redeemLink.textContent = d.redeemFullUrl;
+const loginCard = document.getElementById('loginCard');
+const workCard = document.getElementById('workCard');
+const resultCard = document.getElementById('resultCard');
+const historyCard = document.getElementById('historyCard');
+
+const username = document.getElementById('username');
+const password = document.getElementById('password');
+const total = document.getElementById('total');
+const loginBtn = document.getElementById('loginBtn');
+const createBtn = document.getElementById('createBtn');
+
+const loginBanner = document.getElementById('loginBanner');
+const workBanner = document.getElementById('workBanner');
+const historyBanner = document.getElementById('historyBanner');
+const whoami = document.getElementById('whoami');
+const nextAfterLoginRaw = new URLSearchParams(location.search).get('next') || '';
+
+const historySearchInput = document.getElementById('historySearchInput');
+const historyPageSize = document.getElementById('historyPageSize');
+const historyTableBody = document.getElementById('historyTableBody');
+const historyPrevBtn = document.getElementById('historyPrevBtn');
+const historyNextBtn = document.getElementById('historyNextBtn');
+const historyPageInfo = document.getElementById('historyPageInfo');
+
+const historyState = {
+  page: 1,
+  pageSize: 10,
+  q: '',
+  totalPages: 1
+};
+
+function safeNextPath(raw) {
+  if (!raw) return '';
+  if (!raw.startsWith('/')) return '';
+  if (raw.startsWith('//')) return '';
+  return raw;
 }
+const nextAfterLogin = safeNextPath(nextAfterLoginRaw);
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function toDisplayTime(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+}
+
+function warningBadge(level) {
+  if (level === 'severe') return { cls: 'badge badge-danger', text: '紧急' };
+  if (level === 'warn') return { cls: 'badge badge-warn', text: '预警' };
+  return { cls: 'badge badge-ok', text: '正常' };
+}
+
+function showBanner(el, type, text) {
+  el.className = 'banner ' + (type === 'error' ? 'banner-error' : 'banner-success');
+  el.textContent = text;
+  el.style.display = text ? 'block' : 'none';
+}
+
+function setLoggedIn(name) {
+  loginCard.style.display = 'none';
+  workCard.style.display = 'block';
+  historyCard.style.display = 'block';
+  whoami.textContent = '已登录: ' + name;
+  showBanner(loginBanner, 'error', '');
+  loadHistory({ resetPage: true });
+}
+
+function setLoggedOut() {
+  loginCard.style.display = 'block';
+  workCard.style.display = 'none';
+  historyCard.style.display = 'none';
+  resultCard.style.display = 'none';
+  whoami.textContent = '';
+  historyTableBody.innerHTML = '';
+  historyPageInfo.textContent = '第 1 / 1 页';
+  showBanner(historyBanner, 'error', '');
+}
+
+function renderHistory(data) {
+  const items = Array.isArray(data.items) ? data.items : [];
+  const pg = data.pagination || {};
+  const summary = data.summary || {};
+
+  document.getElementById('sumVoucherCount').textContent = String(summary.totalVouchers || 0);
+  document.getElementById('sumIssued').textContent = String(summary.totalIssued || 0);
+  document.getElementById('sumUsed').textContent = String(summary.totalUsed || 0);
+  document.getElementById('sumRemain').textContent = String(summary.totalRemain || 0);
+
+  if (!items.length) {
+    historyTableBody.innerHTML = '<tr><td colspan="6" class="muted">没有匹配的停车券记录</td></tr>';
+  } else {
+    historyTableBody.innerHTML = items.map((item) => {
+      const badge = warningBadge(item.warning?.level || 'ok');
+      return `<tr>
+        <td class="mono">${escapeHtml(item.id || '-')}</td>
+        <td>${escapeHtml(toDisplayTime(item.createdAt))}</td>
+        <td>${item.total}</td>
+        <td>${item.used}</td>
+        <td>${item.remain}</td>
+        <td><span class="${badge.cls}">${badge.text}</span></td>
+      </tr>`;
+    }).join('');
+  }
+
+  historyState.page = Number(pg.page || 1);
+  historyState.totalPages = Number(pg.totalPages || 1);
+  historyPageInfo.textContent = `第 ${historyState.page} / ${historyState.totalPages} 页，共 ${pg.total || 0} 条`;
+  historyPrevBtn.disabled = !pg.hasPrev;
+  historyNextBtn.disabled = !pg.hasNext;
+}
+
+async function loadHistory(options = {}) {
+  if (options.resetPage) historyState.page = 1;
+  const params = new URLSearchParams({
+    page: String(historyState.page),
+    pageSize: String(historyState.pageSize)
+  });
+  if (historyState.q) params.set('q', historyState.q);
+
+  try {
+    const r = await fetch('/api/admin/vouchers?' + params.toString(), { credentials: 'same-origin' });
+    const d = await r.json();
+    if (!r.ok) {
+      if (r.status === 401) {
+        setLoggedOut();
+        showBanner(loginBanner, 'error', '登录已失效，请重新登录。');
+        return;
+      }
+      showBanner(historyBanner, 'error', d.error || '加载历史失败');
+      return;
+    }
+    renderHistory(d);
+    showBanner(historyBanner, 'success', '');
+  } catch {
+    showBanner(historyBanner, 'error', '网络错误，历史记录加载失败。');
+  }
+}
+
+async function checkSession() {
+  const r = await fetch('/api/admin/session', { credentials: 'same-origin' });
+  if (!r.ok) {
+    setLoggedOut();
+    return;
+  }
+  const d = await r.json();
+  if (nextAfterLogin) {
+    location.href = nextAfterLogin;
+    return;
+  }
+  setLoggedIn(d.username || 'qzadmin');
+}
+
+async function login() {
+  loginBtn.disabled = true;
+  showBanner(loginBanner, 'error', '');
+  try {
+    const r = await fetch('/api/admin/login', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username.value.trim(), password: password.value })
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      showBanner(loginBanner, 'error', d.message || '登录失败');
+      return;
+    }
+    if (nextAfterLogin) {
+      location.href = nextAfterLogin;
+      return;
+    }
+    setLoggedIn(d.username);
+    showBanner(workBanner, 'success', '登录成功，可以开始创建停车券。');
+    password.value = '';
+  } catch {
+    showBanner(loginBanner, 'error', '网络错误，请稍后重试。');
+  } finally {
+    loginBtn.disabled = false;
+  }
+}
+
+async function logout() {
+  await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' });
+  setLoggedOut();
+}
+
+async function createVoucher() {
+  const totalValue = Number(total.value);
+  if (!Number.isInteger(totalValue) || totalValue <= 0) {
+    showBanner(workBanner, 'error', '总次数必须是正整数。');
+    return;
+  }
+
+  createBtn.disabled = true;
+  showBanner(workBanner, 'error', '');
+  try {
+    const r = await fetch('/api/admin/voucher', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ total: totalValue })
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      if (r.status === 401) {
+        setLoggedOut();
+        showBanner(loginBanner, 'error', '登录已失效，请重新登录。');
+        return;
+      }
+      showBanner(workBanner, 'error', d.error || '创建失败');
+      return;
+    }
+
+    resultCard.style.display = 'block';
+    document.getElementById('voucherId').textContent = d.voucher.id;
+    document.getElementById('voucherRemain').textContent = String(d.voucher.remain);
+
+    const linkEl = document.getElementById('redeemLink');
+    linkEl.href = d.redeemFullUrl;
+    linkEl.textContent = d.redeemFullUrl;
+
+    document.getElementById('qr').src = d.qrDataUrl;
+    await loadHistory({ resetPage: true });
+    showBanner(workBanner, 'success', '停车券创建成功。');
+  } catch {
+    showBanner(workBanner, 'error', '网络错误，请稍后重试。');
+  } finally {
+    createBtn.disabled = false;
+  }
+}
+
+async function copyLink() {
+  const text = document.getElementById('redeemLink').textContent;
+  if (!text || text === '-') return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showBanner(workBanner, 'success', '使用链接已复制。');
+  } catch {
+    showBanner(workBanner, 'error', '复制失败，请手动复制。');
+  }
+}
+
+document.getElementById('loginForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  login();
+});
+
+document.querySelectorAll('[data-total]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    total.value = btn.dataset.total;
+  });
+});
+
+document.getElementById('createBtn').addEventListener('click', createVoucher);
+document.getElementById('logoutBtn').addEventListener('click', logout);
+document.getElementById('copyLinkBtn').addEventListener('click', copyLink);
+document.getElementById('refreshHistoryBtn').addEventListener('click', () => loadHistory());
+document.getElementById('historySearchBtn').addEventListener('click', () => {
+  historyState.q = historySearchInput.value.trim();
+  loadHistory({ resetPage: true });
+});
+historySearchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    historyState.q = historySearchInput.value.trim();
+    loadHistory({ resetPage: true });
+  }
+});
+historyPageSize.addEventListener('change', () => {
+  historyState.pageSize = Number(historyPageSize.value) || 10;
+  loadHistory({ resetPage: true });
+});
+historyPrevBtn.addEventListener('click', () => {
+  historyState.page = Math.max(1, historyState.page - 1);
+  loadHistory();
+});
+historyNextBtn.addEventListener('click', () => {
+  historyState.page = Math.min(historyState.totalPages, historyState.page + 1);
+  loadHistory();
+});
+
+checkSession();
 </script>
-</body></html>
+</body>
+</html>

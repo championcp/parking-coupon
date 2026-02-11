@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { nanoid } from "nanoid";
 import QRCode from "qrcode";
+import crypto from "crypto";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,13 +12,16 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.set("trust proxy", true);
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
 
-const DATA_DIR = path.join(__dirname, "data");
+const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, "data");
 const VOUCHER_FILE = path.join(DATA_DIR, "vouchers.json");
 const LOG_FILE = path.join(DATA_DIR, "logs.jsonl");
 
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "dev_admin_token";
+const ADMIN_USERNAME = "qzadmin";
+const ADMIN_PASSWORD = "Qzkj@2026#";
+const SESSION_COOKIE_NAME = "pc_admin_session";
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const adminSessions = new Map();
 
 await fse.ensureDir(DATA_DIR);
 if (!(await fse.pathExists(VOUCHER_FILE))) await fse.writeJson(VOUCHER_FILE, {}, { spaces: 2 });
@@ -27,7 +31,9 @@ let writeQueue = Promise.resolve();
 function enqueueWrite(fn) {
   const run = writeQueue.then(fn);
   // Keep the queue alive after failures, but still propagate the current error to caller.
-  writeQueue = run.catch((err) => console.error(err));
+  writeQueue = run.catch((err) => {
+    if (!err?.expected) console.error(err);
+  });
   return run;
 }
 
@@ -54,10 +60,64 @@ async function voucherQrDataUrl(voucherId) {
   return await QRCode.toDataURL(voucherId, { margin: 1, width: 320 });
 }
 
+function parseCookies(req) {
+  const out = {};
+  const rawCookie = req.headers.cookie || "";
+  for (const part of rawCookie.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const idx = trimmed.indexOf("=");
+    if (idx <= 0) continue;
+    const key = trimmed.slice(0, idx);
+    const value = trimmed.slice(idx + 1);
+    out[key] = value;
+  }
+  return out;
+}
+
+function setAdminSessionCookie(res, sessionId) {
+  const maxAgeSec = Math.floor(SESSION_TTL_MS / 1000);
+  res.setHeader("Set-Cookie", `${SESSION_COOKIE_NAME}=${sessionId}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAgeSec}`);
+}
+
+function clearAdminSessionCookie(res) {
+  res.setHeader("Set-Cookie", `${SESSION_COOKIE_NAME}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`);
+}
+
+function getAdminSession(req) {
+  const cookies = parseCookies(req);
+  const sessionId = cookies[SESSION_COOKIE_NAME];
+  if (!sessionId) return null;
+  const session = adminSessions.get(sessionId);
+  if (!session) return null;
+  if (session.expiresAt <= Date.now()) {
+    adminSessions.delete(sessionId);
+    return null;
+  }
+  return { sessionId, ...session };
+}
+
+function createAdminSession(username) {
+  const sessionId = crypto.randomBytes(24).toString("hex");
+  const session = { username, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL_MS };
+  adminSessions.set(sessionId, session);
+  return sessionId;
+}
+
 function adminAuth(req, res, next) {
-  const auth = req.headers.authorization || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (token !== ADMIN_TOKEN) return res.status(401).json({ error: "Unauthorized" });
+  const session = getAdminSession(req);
+  if (!session) return res.status(401).json({ error: "Unauthorized", message: "请先登录管理员账号" });
+  req.adminUser = session.username;
+  next();
+}
+
+function redeemPageAuth(req, res, next) {
+  const session = getAdminSession(req);
+  if (!session) {
+    const nextUrl = encodeURIComponent(req.originalUrl || "/redeem.html");
+    return res.redirect(`/admin.html?next=${nextUrl}`);
+  }
+  req.adminUser = session.username;
   next();
 }
 
@@ -67,6 +127,40 @@ function reqMeta(req) {
     ua: req.headers["user-agent"] || ""
   };
 }
+
+function toIntOrDefault(value, defaultValue) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return defaultValue;
+  return Math.trunc(n);
+}
+
+app.post("/api/admin/login", async (req, res) => {
+  const username = (req.body?.username || "").trim();
+  const password = req.body?.password || "";
+  if (username !== ADMIN_USERNAME || password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: "Unauthorized", message: "账号或密码错误" });
+  }
+  const sessionId = createAdminSession(username);
+  setAdminSessionCookie(res, sessionId);
+  const now = new Date().toISOString();
+  await appendLog({ ts: now, type: "ADMIN_LOGIN", voucherId: null, ...reqMeta(req), meta: { username } });
+  res.json({ ok: true, username, expiresInSec: Math.floor(SESSION_TTL_MS / 1000) });
+});
+
+app.get("/api/admin/session", (req, res) => {
+  const session = getAdminSession(req);
+  if (!session) return res.status(401).json({ error: "Unauthorized" });
+  res.json({ ok: true, username: session.username, expiresAt: new Date(session.expiresAt).toISOString() });
+});
+
+app.post("/api/admin/logout", async (req, res) => {
+  const session = getAdminSession(req);
+  if (session?.sessionId) adminSessions.delete(session.sessionId);
+  clearAdminSessionCookie(res);
+  const now = new Date().toISOString();
+  await appendLog({ ts: now, type: "ADMIN_LOGOUT", voucherId: null, ...reqMeta(req), meta: { username: session?.username || "" } });
+  res.json({ ok: true });
+});
 
 app.post("/api/admin/voucher", adminAuth, async (req, res) => {
   const total = Number(req.body?.total);
@@ -80,7 +174,7 @@ app.post("/api/admin/voucher", adminAuth, async (req, res) => {
     const all = await readVouchers();
     all[id] = voucher;
     await writeVouchers(all);
-    await appendLog({ ts: now, type: "CREATE", voucherId: id, ...reqMeta(req), meta: { total } });
+    await appendLog({ ts: now, type: "CREATE", voucherId: id, ...reqMeta(req), meta: { total, admin: req.adminUser } });
   });
 
   const redeemUrl = `/redeem.html?v=${id}`;
@@ -88,6 +182,72 @@ app.post("/api/admin/voucher", adminAuth, async (req, res) => {
   const qrDataUrl = await QRCode.toDataURL(redeemFullUrl, { margin: 1, width: 320 });
   res.json({ voucher, redeemUrl, redeemFullUrl, qrDataUrl });
 });
+
+app.get("/api/admin/vouchers", adminAuth, async (req, res) => {
+  const page = Math.max(1, toIntOrDefault(req.query.page, 1));
+  const pageSize = Math.min(100, Math.max(1, toIntOrDefault(req.query.pageSize, 10)));
+  const q = String(req.query.q || "").trim().toLowerCase();
+
+  const all = await readVouchers();
+  const allItems = Object.values(all)
+    .map((v) => {
+      const total = Number(v.total) || 0;
+      const remain = Number(v.remain) || 0;
+      const used = Math.max(0, total - remain);
+      const level = warnLevel(remain);
+      return {
+        id: v.id,
+        total,
+        used,
+        remain,
+        status: v.status || "active",
+        createdAt: v.createdAt || "",
+        warning: { level, text: warnText(level) }
+      };
+    })
+    .filter((v) => (q ? (v.id || "").toLowerCase().includes(q) : true))
+    .sort((a, b) => {
+      const ta = Date.parse(a.createdAt || "");
+      const tb = Date.parse(b.createdAt || "");
+      if (!Number.isNaN(tb) && !Number.isNaN(ta) && tb !== ta) return tb - ta;
+      return String(b.id || "").localeCompare(String(a.id || ""));
+    });
+
+  const total = allItems.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * pageSize;
+  const items = allItems.slice(start, start + pageSize);
+
+  let totalIssued = 0;
+  let totalUsed = 0;
+  let totalRemain = 0;
+  for (const item of allItems) {
+    totalIssued += item.total;
+    totalUsed += item.used;
+    totalRemain += item.remain;
+  }
+
+  res.json({
+    items,
+    pagination: {
+      page: safePage,
+      pageSize,
+      total,
+      totalPages,
+      hasPrev: safePage > 1,
+      hasNext: safePage < totalPages
+    },
+    summary: {
+      totalVouchers: total,
+      totalIssued,
+      totalUsed,
+      totalRemain
+    }
+  });
+});
+
+app.use("/api/voucher", adminAuth);
 
 app.get("/api/voucher/:id", async (req, res) => {
   const all = await readVouchers();
@@ -109,7 +269,11 @@ app.post("/api/voucher/:id/confirm", async (req, res) => {
   await enqueueWrite(async () => {
     const all = await readVouchers();
     const v = all[req.params.id];
-    if (!v || v.remain <= 0) throw new Error("Invalid");
+    if (!v || v.remain <= 0) {
+      const err = new Error("Invalid");
+      err.expected = true;
+      throw err;
+    }
     const before = v.remain;
     v.remain -= 1;
     await writeVouchers(all);
@@ -122,6 +286,12 @@ app.post("/api/voucher/:id/confirm", async (req, res) => {
   const qrDataUrl = await voucherQrDataUrl(updated.id);
   res.json({ voucher: updated, warning: { level, text: warnText(level) }, qrDataUrl });
 });
+
+app.get("/redeem.html", redeemPageAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "redeem.html"));
+});
+
+app.use(express.static(path.join(__dirname, "public"), { index: "index.html" }));
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log("Server running on http://localhost:" + PORT));

@@ -1,16 +1,1 @@
-{
-  "VCH_20260209_OFLPRC": {
-    "id": "VCH_20260209_OFLPRC",
-    "total": 50,
-    "remain": 47,
-    "createdAt": "2026-02-09T14:47:28.466Z",
-    "status": "active"
-  },
-  "VCH_20260209_ZNCXXA": {
-    "id": "VCH_20260209_ZNCXXA",
-    "total": 2,
-    "remain": 1,
-    "createdAt": "2026-02-09T14:50:56.646Z",
-    "status": "active"
-  }
-}
+{}

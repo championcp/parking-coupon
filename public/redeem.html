@@ -1,34 +1,170 @@
 <!doctype html>
-<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>使用停车券</title></head>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>停车券使用</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
 <body>
-<input id="vid"/><button onclick="load()">加载</button>
-<p>展码（给收费员扫码）</p>
-<img id="qr" alt="voucher qrcode" style="max-width:320px;width:100%;height:auto;display:block"/>
-<p id="info"></p>
-<button onclick="use()">确认使用</button>
+  <main class="page">
+    <section class="hero">
+      <h1 class="title">停车券使用页</h1>
+      <p class="subtitle">输入券号后先展码，再点击确认使用扣减 1 次。</p>
+    </section>
+
+    <section class="grid grid-2">
+      <article class="card">
+        <h3 style="margin-top:0">券号查询</h3>
+        <div class="grid">
+          <label>
+            <span class="field-label">停车券 ID</span>
+            <input id="vid" type="text" placeholder="例如：VCH_20260210_ABC123"/>
+          </label>
+          <div class="actions">
+            <button id="loadBtn" type="button" class="btn btn-primary">加载并展码</button>
+            <button id="confirmBtn" type="button" class="btn btn-secondary" disabled>确认使用 -1</button>
+          </div>
+        </div>
+        <div id="actionBanner" class="banner"></div>
+      </article>
+
+      <article class="card">
+        <h3 style="margin-top:0">券状态</h3>
+        <div class="kv">
+          <div class="kv-item"><span class="muted">券号</span><b id="voucherId" class="mono">-</b></div>
+          <div class="kv-item"><span class="muted">状态</span><span id="levelBadge" class="badge">未加载</span></div>
+          <div class="kv-item"><span class="muted">剩余/总次数</span><b id="remainText">-</b></div>
+          <div class="kv-item"><span class="muted">创建时间</span><b id="createdAt">-</b></div>
+        </div>
+        <div class="progress"><span id="remainBar"></span></div>
+      </article>
+    </section>
+
+    <section class="card" style="margin-top:14px">
+      <h3 style="margin-top:0">展码（给收费员扫码）</h3>
+      <div class="qr-wrap">
+        <img id="qr" alt="voucher qrcode"/>
+      </div>
+      <p id="warningText" class="muted" style="margin:0">加载券后会在这里显示二维码。</p>
+    </section>
+  </main>
+
 <script>
-async function load(){
- const id = vid.value.trim();
- if (!id) return;
- const r = await fetch('/api/voucher/'+encodeURIComponent(id));
- const d = await r.json();
- info.textContent = JSON.stringify(d);
- if (r.ok && d.qrDataUrl) qr.src = d.qrDataUrl;
- if (r.ok) fetch('/api/voucher/'+encodeURIComponent(id)+'/display',{method:'POST'});
+const vid = document.getElementById('vid');
+const loadBtn = document.getElementById('loadBtn');
+const confirmBtn = document.getElementById('confirmBtn');
+const actionBanner = document.getElementById('actionBanner');
+
+let currentVoucherId = '';
+let currentRemain = 0;
+
+function showBanner(type, text) {
+  actionBanner.className = 'banner ' + (type === 'error' ? 'banner-error' : 'banner-success');
+  actionBanner.textContent = text;
+  actionBanner.style.display = text ? 'block' : 'none';
 }
-async function use(){
- const id = vid.value.trim();
- if (!id) return;
- const r = await fetch('/api/voucher/'+encodeURIComponent(id)+'/confirm',{method:'POST'});
- const d = await r.json();
- info.textContent = JSON.stringify(d);
- if (r.ok && d.qrDataUrl) qr.src = d.qrDataUrl;
+
+function badgeInfo(level) {
+  if (level === 'severe') return { cls: 'badge badge-danger', text: '紧急' };
+  if (level === 'warn') return { cls: 'badge badge-warn', text: '预警' };
+  return { cls: 'badge badge-ok', text: '正常' };
 }
+
+function toDisplayTime(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+}
+
+function renderVoucher(data) {
+  const v = data.voucher;
+  const level = data.warning?.level || 'ok';
+  const badge = badgeInfo(level);
+
+  currentVoucherId = v.id;
+  currentRemain = Number(v.remain) || 0;
+  document.getElementById('voucherId').textContent = v.id;
+  document.getElementById('remainText').textContent = `${v.remain} / ${v.total}`;
+  document.getElementById('createdAt').textContent = toDisplayTime(v.createdAt);
+  document.getElementById('levelBadge').className = badge.cls;
+  document.getElementById('levelBadge').textContent = badge.text;
+
+  const percent = Math.max(0, Math.min(100, Math.round((v.remain / v.total) * 100)));
+  document.getElementById('remainBar').style.width = percent + '%';
+
+  if (data.qrDataUrl) document.getElementById('qr').src = data.qrDataUrl;
+  document.getElementById('warningText').textContent = data.warning?.text || '状态正常，可继续使用。';
+
+  confirmBtn.disabled = currentRemain <= 0;
+  if (currentRemain <= 0) {
+    showBanner('error', '该停车券剩余次数为 0，无法继续扣减。');
+  }
+}
+
+async function loadVoucher() {
+  const id = vid.value.trim();
+  if (!id) {
+    showBanner('error', '请输入停车券 ID。');
+    return;
+  }
+
+  loadBtn.disabled = true;
+  showBanner('success', '');
+  try {
+    const r = await fetch('/api/voucher/' + encodeURIComponent(id));
+    const d = await r.json();
+    if (!r.ok) {
+      currentVoucherId = '';
+      currentRemain = 0;
+      confirmBtn.disabled = true;
+      showBanner('error', d.error || '券不存在');
+      return;
+    }
+
+    renderVoucher(d);
+    showBanner('success', '券加载成功，已完成展码记录。');
+
+    fetch('/api/voucher/' + encodeURIComponent(id) + '/display', { method: 'POST' });
+  } catch {
+    showBanner('error', '网络错误，请稍后重试。');
+  } finally {
+    loadBtn.disabled = false;
+  }
+}
+
+async function confirmUse() {
+  if (!currentVoucherId) {
+    showBanner('error', '请先加载停车券。');
+    return;
+  }
+
+  confirmBtn.disabled = true;
+  try {
+    const r = await fetch('/api/voucher/' + encodeURIComponent(currentVoucherId) + '/confirm', { method: 'POST' });
+    const d = await r.json();
+    if (!r.ok) {
+      showBanner('error', d.error || '扣减失败');
+      return;
+    }
+
+    renderVoucher(d);
+    showBanner('success', '扣减成功，已减少 1 次。');
+  } catch {
+    showBanner('error', '网络错误，请稍后重试。');
+  } finally {
+    confirmBtn.disabled = !currentVoucherId || currentRemain <= 0;
+  }
+}
+
+loadBtn.addEventListener('click', loadVoucher);
+confirmBtn.addEventListener('click', confirmUse);
+
 const qv = new URLSearchParams(location.search).get('v');
 if (qv) {
   vid.value = qv;
-  load();
+  loadVoucher();
 }
 </script>
-</body></html>
+</body>
+</html>

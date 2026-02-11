@@ -1,1 +1,31 @@
-<a href='/admin.html'>后台</a> | <a href='/redeem.html'>前台</a>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>停车券系统</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <h1 class="title">停车券管理系统</h1>
+      <p class="subtitle">支持管理员登录发券、前台展码和确认扣减，适配手机与桌面端。</p>
+    </section>
+
+    <section class="links-grid">
+      <a class="card link-card" href="/admin.html">
+        <h3>管理员后台</h3>
+        <p>登录后创建停车券二维码，复制使用链接给前台人员或车主扫码。</p>
+        <span class="pill">账号: qzadmin</span>
+      </a>
+
+      <a class="card link-card" href="/redeem.html">
+        <h3>停车券使用页</h3>
+        <p>输入券号即可展码，收费员确认后自动扣减剩余次数。</p>
+        <span class="pill">支持扫码参数 v=券号</span>
+      </a>
+    </section>
+  </main>
+</body>
+</html>
