@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.set("trust proxy", true);
-app.use(express.json());
+app.use(express.json({ limit: "3mb" }));
 
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(__dirname, "data");
 const VOUCHER_FILE = path.join(DATA_DIR, "vouchers.json");
@@ -21,6 +21,8 @@ const ADMIN_USERNAME = "qzadmin";
 const ADMIN_PASSWORD = "Qzkj@2026#";
 const SESSION_COOKIE_NAME = "pc_admin_session";
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const MAX_MANUAL_QR_DATA_URL_LENGTH = 2 * 1024 * 1024;
+const SUPPORTED_QR_DATA_URL_PREFIX = /^data:image\/(png|jpeg|jpg|webp);base64,/i;
 const adminSessions = new Map();
 
 await fse.ensureDir(DATA_DIR);
@@ -58,6 +60,47 @@ function warnText(level) {
 }
 async function voucherQrDataUrl(voucherId) {
   return await QRCode.toDataURL(voucherId, { margin: 1, width: 320 });
+}
+
+async function voucherDisplayQrDataUrl(voucher) {
+  const manualQrDataUrl = voucher?.manualQr?.dataUrl;
+  if (typeof manualQrDataUrl === "string" && manualQrDataUrl.startsWith("data:image/")) return manualQrDataUrl;
+  return await voucherQrDataUrl(voucher.id);
+}
+
+function normalizeManualQrDataUrl(value) {
+  if (typeof value !== "string") {
+    const err = new Error("上传二维码必须是图片 Data URL 字符串");
+    err.expected = true;
+    throw err;
+  }
+  const trimmed = value.trim();
+  if (!SUPPORTED_QR_DATA_URL_PREFIX.test(trimmed)) {
+    const err = new Error("仅支持 PNG/JPEG/WEBP 图片");
+    err.expected = true;
+    throw err;
+  }
+  if (trimmed.length > MAX_MANUAL_QR_DATA_URL_LENGTH) {
+    const err = new Error("二维码图片过大，请压缩后重试");
+    err.expected = true;
+    throw err;
+  }
+  const base64Index = trimmed.indexOf(",");
+  const base64Raw = base64Index >= 0 ? trimmed.slice(base64Index + 1) : "";
+  let decoded;
+  try {
+    decoded = Buffer.from(base64Raw, "base64");
+  } catch {
+    const err = new Error("二维码图片内容无效");
+    err.expected = true;
+    throw err;
+  }
+  if (!decoded.length) {
+    const err = new Error("二维码图片内容为空");
+    err.expected = true;
+    throw err;
+  }
+  return trimmed;
 }
 
 function parseCookies(req) {
@@ -165,22 +208,83 @@ app.post("/api/admin/logout", async (req, res) => {
 app.post("/api/admin/voucher", adminAuth, async (req, res) => {
   const total = Number(req.body?.total);
   if (!Number.isFinite(total) || total <= 0) return res.status(400).json({ error: "Invalid total" });
+  const manualQrDataUrlRaw = req.body?.manualQrDataUrl;
+  let manualQrDataUrl = null;
+  if (manualQrDataUrlRaw !== undefined && manualQrDataUrlRaw !== null && String(manualQrDataUrlRaw).trim() !== "") {
+    try {
+      manualQrDataUrl = normalizeManualQrDataUrl(manualQrDataUrlRaw);
+    } catch (err) {
+      return res.status(400).json({ error: "Invalid manualQrDataUrl", message: err.message || "二维码图片无效" });
+    }
+  }
 
   const id = `VCH_${new Date().toISOString().slice(0,10).replaceAll("-","")}_${nanoid(6).toUpperCase()}`;
   const now = new Date().toISOString();
   const voucher = { id, total, remain: total, createdAt: now, status: "active" };
+  if (manualQrDataUrl) {
+    voucher.manualQr = { dataUrl: manualQrDataUrl, uploadedAt: now, uploadedBy: req.adminUser };
+  }
 
   await enqueueWrite(async () => {
     const all = await readVouchers();
     all[id] = voucher;
     await writeVouchers(all);
-    await appendLog({ ts: now, type: "CREATE", voucherId: id, ...reqMeta(req), meta: { total, admin: req.adminUser } });
+    await appendLog({
+      ts: now,
+      type: "CREATE",
+      voucherId: id,
+      ...reqMeta(req),
+      meta: { total, admin: req.adminUser, hasManualQr: Boolean(manualQrDataUrl) }
+    });
   });
 
   const redeemUrl = `/redeem.html?v=${id}`;
   const redeemFullUrl = `${req.protocol}://${req.get("host")}${redeemUrl}`;
-  const qrDataUrl = await QRCode.toDataURL(redeemFullUrl, { margin: 1, width: 320 });
-  res.json({ voucher, redeemUrl, redeemFullUrl, qrDataUrl });
+  const redeemPageQrDataUrl = await QRCode.toDataURL(redeemFullUrl, { margin: 1, width: 320 });
+  res.json({
+    voucher,
+    redeemUrl,
+    redeemFullUrl,
+    qrDataUrl: redeemPageQrDataUrl,
+    voucherQrSource: voucher.manualQr ? "manual" : "auto"
+  });
+});
+
+app.post("/api/admin/voucher/:id/manual-qr", adminAuth, async (req, res) => {
+  let normalized;
+  try {
+    normalized = normalizeManualQrDataUrl(req.body?.qrDataUrl);
+  } catch (err) {
+    return res.status(400).json({ error: "Invalid qrDataUrl", message: err.message || "二维码图片无效" });
+  }
+
+  let updatedVoucher = null;
+  const now = new Date().toISOString();
+  await enqueueWrite(async () => {
+    const all = await readVouchers();
+    const voucher = all[req.params.id];
+    if (!voucher) {
+      const err = new Error("Not found");
+      err.expected = true;
+      throw err;
+    }
+    voucher.manualQr = { dataUrl: normalized, uploadedAt: now, uploadedBy: req.adminUser };
+    await writeVouchers(all);
+    await appendLog({ ts: now, type: "UPLOAD_QR", voucherId: req.params.id, ...reqMeta(req), meta: { admin: req.adminUser } });
+    updatedVoucher = voucher;
+  }).catch((err) => {
+    if (err?.expected) return res.status(404).json({ error: "Not found", message: "停车券不存在" });
+    return res.status(500).json({ error: "Upload failed", message: "上传二维码失败，请稍后重试" });
+  });
+  if (!updatedVoucher) return;
+
+  res.json({
+    ok: true,
+    voucher: updatedVoucher,
+    qrDataUrl: updatedVoucher.manualQr?.dataUrl || "",
+    qrSource: "manual",
+    uploadedAt: updatedVoucher.manualQr?.uploadedAt || now
+  });
 });
 
 app.get("/api/admin/vouchers", adminAuth, async (req, res) => {
@@ -202,6 +306,8 @@ app.get("/api/admin/vouchers", adminAuth, async (req, res) => {
         remain,
         status: v.status || "active",
         createdAt: v.createdAt || "",
+        qrSource: v.manualQr?.dataUrl ? "manual" : "auto",
+        manualQrUploadedAt: v.manualQr?.uploadedAt || "",
         warning: { level, text: warnText(level) }
       };
     })
@@ -254,8 +360,8 @@ app.get("/api/voucher/:id", async (req, res) => {
   const v = all[req.params.id];
   if (!v) return res.status(404).json({ error: "Not found" });
   const level = warnLevel(v.remain);
-  const qrDataUrl = await voucherQrDataUrl(v.id);
-  res.json({ voucher: v, warning: { level, text: warnText(level) }, qrDataUrl });
+  const qrDataUrl = await voucherDisplayQrDataUrl(v);
+  res.json({ voucher: v, warning: { level, text: warnText(level) }, qrDataUrl, qrSource: v.manualQr?.dataUrl ? "manual" : "auto" });
 });
 
 app.post("/api/voucher/:id/display", async (req, res) => {
@@ -283,8 +389,13 @@ app.post("/api/voucher/:id/confirm", async (req, res) => {
   }).catch(() => res.status(400).json({ error: "Cannot confirm" }));
   if (!updated) return;
   const level = warnLevel(updated.remain);
-  const qrDataUrl = await voucherQrDataUrl(updated.id);
-  res.json({ voucher: updated, warning: { level, text: warnText(level) }, qrDataUrl });
+  const qrDataUrl = await voucherDisplayQrDataUrl(updated);
+  res.json({
+    voucher: updated,
+    warning: { level, text: warnText(level) },
+    qrDataUrl,
+    qrSource: updated.manualQr?.dataUrl ? "manual" : "auto"
+  });
 });
 
 app.get("/redeem.html", redeemPageAuth, (req, res) => {

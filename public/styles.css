@@ -127,6 +127,11 @@ input:focus {
   cursor: not-allowed;
 }
 
+.btn-xs {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -150,6 +155,16 @@ input:focus {
 .badge-danger {
   color: #991b1b;
   background: #fee2e2;
+}
+
+.badge-light {
+  color: #334155;
+  background: #e2e8f0;
+}
+
+.badge-teal {
+  color: #0f766e;
+  background: #ccfbf1;
 }
 
 .banner {
@@ -316,7 +331,7 @@ input:focus {
 
 .history-table {
   width: 100%;
-  min-width: 700px;
+  min-width: 860px;
   border-collapse: collapse;
   font-size: 14px;
 }

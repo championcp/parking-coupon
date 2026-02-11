@@ -10,6 +10,9 @@
 - 停车券创建
   - 录入总次数，生成券号与二维码
   - 返回可直接访问的使用页链接
+- 手动上传停车场二维码
+  - 管理员可在后台为停车券上传二维码图片
+  - 使用页展码优先展示手动上传二维码（未上传时回退自动二维码）
 - 停车券使用（展码 + 确认扣减）
   - 展示券二维码
   - 每次确认使用扣减 1 次
@@ -121,19 +124,23 @@ PORT=9090 DATA_DIR=/tmp/parking-coupon-data node server.js
 ### 7.2 管理员发券与历史
 
 - `POST /api/admin/voucher`
-  - body: `{ "total": 50 }`
-  - 返回：`voucher`, `redeemUrl`, `redeemFullUrl`, `qrDataUrl`
+  - body: `{ "total": 50, "manualQrDataUrl": "data:image/png;base64,..." }`
+  - `manualQrDataUrl` 可选，支持 `PNG/JPEG/WEBP`
+  - 返回：`voucher`, `redeemUrl`, `redeemFullUrl`, `qrDataUrl`, `voucherQrSource`
+- `POST /api/admin/voucher/:id/manual-qr`
+  - body: `{ "qrDataUrl": "data:image/png;base64,..." }`
+  - 为指定停车券上传/更新手动二维码
 - `GET /api/admin/vouchers?page=1&pageSize=10&q=关键词`
   - 返回：
-    - `items[]`：每张券 `id/total/used/remain/status/createdAt/warning`
+    - `items[]`：每张券 `id/total/used/remain/status/createdAt/qrSource/manualQrUploadedAt/warning`
     - `pagination`：分页信息
     - `summary`：汇总统计
 
 ### 7.3 停车券使用 API（登录后）
 
-- `GET /api/voucher/:id`：查询券详情
+- `GET /api/voucher/:id`：查询券详情（返回 `qrDataUrl` 与 `qrSource`）
 - `POST /api/voucher/:id/display`：记录展码行为
-- `POST /api/voucher/:id/confirm`：确认使用并扣减
+- `POST /api/voucher/:id/confirm`：确认使用并扣减（返回 `qrDataUrl` 与 `qrSource`）
 
 ## 8. 数据存储说明
 
@@ -148,7 +155,12 @@ PORT=9090 DATA_DIR=/tmp/parking-coupon-data node server.js
     "total": 50,
     "remain": 49,
     "createdAt": "2026-02-10T12:00:00.000Z",
-    "status": "active"
+    "status": "active",
+    "manualQr": {
+      "dataUrl": "data:image/png;base64,...",
+      "uploadedAt": "2026-02-11T08:30:00.000Z",
+      "uploadedBy": "qzadmin"
+    }
   }
 }
 ```

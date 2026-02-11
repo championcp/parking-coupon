@@ -8,6 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 const ROOT = process.cwd();
 const PORT = 18000 + Math.floor(Math.random() * 1000);
 const BASE = `http://127.0.0.1:${PORT}`;
+const MANUAL_QR_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9erj8AAAAASUVORK5CYII=";
 
 async function waitForServerReady() {
   for (let i = 0; i < 80; i += 1) {
@@ -119,6 +120,28 @@ try {
 
   const voucherId = create.payload.voucher.id;
 
+  const uploadUnauthorized = await request(`/api/admin/voucher/${encodeURIComponent(voucherId)}/manual-qr`, {
+    method: "POST",
+    json: { qrDataUrl: MANUAL_QR_DATA_URL }
+  });
+  assert.equal(uploadUnauthorized.status, 401, "Unauthenticated manual QR upload should return 401");
+
+  const uploadInvalid = await request(`/api/admin/voucher/${encodeURIComponent(voucherId)}/manual-qr`, {
+    method: "POST",
+    cookie: adminCookie,
+    json: { qrDataUrl: "not-a-data-url" }
+  });
+  assert.equal(uploadInvalid.status, 400, "Invalid manual QR upload should return 400");
+
+  const uploadManual = await request(`/api/admin/voucher/${encodeURIComponent(voucherId)}/manual-qr`, {
+    method: "POST",
+    cookie: adminCookie,
+    json: { qrDataUrl: MANUAL_QR_DATA_URL }
+  });
+  assert.equal(uploadManual.status, 200, "Manual QR upload should return 200");
+  assert.equal(uploadManual.payload.qrSource, "manual", "Manual QR upload response should mark source as manual");
+  assert.equal(uploadManual.payload.qrDataUrl, MANUAL_QR_DATA_URL, "Manual QR upload response should return uploaded QR");
+
   const history1 = await request(`/api/admin/vouchers?page=1&pageSize=10&q=${encodeURIComponent(voucherId)}`, {
     cookie: adminCookie
   });
@@ -128,10 +151,13 @@ try {
   assert.ok(item1, "Created voucher should be present in history list");
   assert.equal(item1.used, 0, "New voucher used count should be 0");
   assert.equal(item1.remain, 2, "New voucher remain count should match total");
+  assert.equal(item1.qrSource, "manual", "History list should show manual QR source after upload");
 
   const getVoucher = await request(`/api/voucher/${encodeURIComponent(voucherId)}`, { cookie: adminCookie });
   assert.equal(getVoucher.status, 200, "Get voucher should return 200");
   assert.equal(getVoucher.payload.voucher.id, voucherId, "Get voucher should return the right voucher");
+  assert.equal(getVoucher.payload.qrSource, "manual", "Get voucher should report manual QR source");
+  assert.equal(getVoucher.payload.qrDataUrl, MANUAL_QR_DATA_URL, "Get voucher should return uploaded QR data");
 
   const displayVoucher = await request(`/api/voucher/${encodeURIComponent(voucherId)}/display`, {
     method: "POST",
@@ -145,6 +171,7 @@ try {
   });
   assert.equal(confirm1.status, 200, "First confirm should return 200");
   assert.equal(confirm1.payload.voucher.remain, 1, "Remain should decrement to 1");
+  assert.equal(confirm1.payload.qrDataUrl, MANUAL_QR_DATA_URL, "Confirm response should keep manual QR data");
 
   const confirm2 = await request(`/api/voucher/${encodeURIComponent(voucherId)}/confirm`, {
     method: "POST",

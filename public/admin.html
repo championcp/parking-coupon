@@ -10,7 +10,7 @@
   <main class="page">
     <section class="hero">
       <h1 class="title">管理员后台</h1>
-      <p class="subtitle">登录后创建停车券二维码。固定账号：<b>qzadmin</b>。</p>
+      <p class="subtitle">登录后创建停车券并支持手动上传停车场二维码。固定账号：<b>qzadmin</b>。</p>
     </section>
 
     <section class="grid grid-2">
@@ -67,14 +67,17 @@
         <div class="kv-item"><span class="muted">券号</span><b id="voucherId" class="mono">-</b></div>
         <div class="kv-item"><span class="muted">剩余次数</span><b id="voucherRemain">-</b></div>
         <div class="kv-item"><span class="muted">使用链接</span><a id="redeemLink" class="mono" href="#" target="_blank" rel="noopener">-</a></div>
+        <div class="kv-item"><span class="muted">展码来源</span><b id="voucherQrSource">自动生成</b></div>
       </div>
       <div class="actions" style="margin-top:12px">
         <button class="btn btn-secondary" id="copyLinkBtn" type="button">复制链接</button>
+        <button class="btn btn-secondary" id="uploadQrBtn" type="button">上传二维码</button>
       </div>
+      <input id="qrUploadInput" type="file" accept="image/png,image/jpeg,image/webp" style="display:none"/>
       <div class="qr-wrap">
         <img id="qr" alt="voucher qrcode"/>
       </div>
-      <p class="muted" style="margin:0">建议车主或收费员使用手机扫码打开使用页。</p>
+      <p class="muted" style="margin:0">默认展示的是使用页二维码；上传后“使用页展码”会优先使用手动上传二维码。</p>
     </section>
 
     <section class="card" id="historyCard" style="display:none; margin-top:14px">
@@ -111,6 +114,8 @@
               <th>已用</th>
               <th>剩余</th>
               <th>状态</th>
+              <th>二维码来源</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody id="historyTableBody"></tbody>
@@ -150,6 +155,10 @@ const historyTableBody = document.getElementById('historyTableBody');
 const historyPrevBtn = document.getElementById('historyPrevBtn');
 const historyNextBtn = document.getElementById('historyNextBtn');
 const historyPageInfo = document.getElementById('historyPageInfo');
+const qrUploadInput = document.getElementById('qrUploadInput');
+const uploadQrBtn = document.getElementById('uploadQrBtn');
+
+let latestVoucherId = '';
 
 const historyState = {
   page: 1,
@@ -187,6 +196,11 @@ function warningBadge(level) {
   return { cls: 'badge badge-ok', text: '正常' };
 }
 
+function qrSourceBadge(source) {
+  if (source === 'manual') return { cls: 'badge badge-teal', text: '手动上传' };
+  return { cls: 'badge badge-light', text: '自动生成' };
+}
+
 function showBanner(el, type, text) {
   el.className = 'banner ' + (type === 'error' ? 'banner-error' : 'banner-success');
   el.textContent = text;
@@ -210,6 +224,7 @@ function setLoggedOut() {
   whoami.textContent = '';
   historyTableBody.innerHTML = '';
   historyPageInfo.textContent = '第 1 / 1 页';
+  latestVoucherId = '';
   showBanner(historyBanner, 'error', '');
 }
 
@@ -224,10 +239,12 @@ function renderHistory(data) {
   document.getElementById('sumRemain').textContent = String(summary.totalRemain || 0);
 
   if (!items.length) {
-    historyTableBody.innerHTML = '<tr><td colspan="6" class="muted">没有匹配的停车券记录</td></tr>';
+    historyTableBody.innerHTML = '<tr><td colspan="8" class="muted">没有匹配的停车券记录</td></tr>';
   } else {
     historyTableBody.innerHTML = items.map((item) => {
       const badge = warningBadge(item.warning?.level || 'ok');
+      const qrBadge = qrSourceBadge(item.qrSource);
+      const qrActionLabel = item.qrSource === 'manual' ? '更新二维码' : '上传二维码';
       return `<tr>
         <td class="mono">${escapeHtml(item.id || '-')}</td>
         <td>${escapeHtml(toDisplayTime(item.createdAt))}</td>
@@ -235,6 +252,8 @@ function renderHistory(data) {
         <td>${item.used}</td>
         <td>${item.remain}</td>
         <td><span class="${badge.cls}">${badge.text}</span></td>
+        <td><span class="${qrBadge.cls}">${qrBadge.text}</span></td>
+        <td><button class="btn btn-secondary btn-xs" type="button" data-upload-voucher="${escapeHtml(item.id || '')}">${qrActionLabel}</button></td>
       </tr>`;
     }).join('');
   }
@@ -351,11 +370,16 @@ async function createVoucher() {
     resultCard.style.display = 'block';
     document.getElementById('voucherId').textContent = d.voucher.id;
     document.getElementById('voucherRemain').textContent = String(d.voucher.remain);
+    latestVoucherId = d.voucher.id;
 
     const linkEl = document.getElementById('redeemLink');
     linkEl.href = d.redeemFullUrl;
     linkEl.textContent = d.redeemFullUrl;
 
+    const sourceBadge = qrSourceBadge(d.voucherQrSource);
+    const sourceEl = document.getElementById('voucherQrSource');
+    sourceEl.textContent = sourceBadge.text;
+    sourceEl.className = sourceBadge.cls;
     document.getElementById('qr').src = d.qrDataUrl;
     await loadHistory({ resetPage: true });
     showBanner(workBanner, 'success', '停车券创建成功。');
@@ -377,6 +401,70 @@ async function copyLink() {
   }
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('读取图片失败'));
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadManualQrForVoucher(voucherId, file) {
+  if (!voucherId) {
+    showBanner(workBanner, 'error', '请先创建或选择一个停车券。');
+    return;
+  }
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showBanner(workBanner, 'error', '仅支持上传图片文件。');
+    return;
+  }
+
+  uploadQrBtn.disabled = true;
+  showBanner(workBanner, 'error', '');
+  try {
+    const qrDataUrl = await fileToDataUrl(file);
+    const r = await fetch('/api/admin/voucher/' + encodeURIComponent(voucherId) + '/manual-qr', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ qrDataUrl })
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      if (r.status === 401) {
+        setLoggedOut();
+        showBanner(loginBanner, 'error', '登录已失效，请重新登录。');
+        return;
+      }
+      showBanner(workBanner, 'error', d.message || d.error || '上传失败');
+      return;
+    }
+
+    latestVoucherId = voucherId;
+    document.getElementById('voucherId').textContent = voucherId;
+    document.getElementById('voucherRemain').textContent = String(d.voucher?.remain ?? '-');
+    const redeemFullUrl = location.origin + '/redeem.html?v=' + encodeURIComponent(voucherId);
+    const linkEl = document.getElementById('redeemLink');
+    linkEl.href = redeemFullUrl;
+    linkEl.textContent = redeemFullUrl;
+    const sourceBadge = qrSourceBadge('manual');
+    const sourceEl = document.getElementById('voucherQrSource');
+    sourceEl.textContent = sourceBadge.text;
+    sourceEl.className = sourceBadge.cls;
+    document.getElementById('qr').src = d.qrDataUrl || '';
+    resultCard.style.display = 'block';
+    await loadHistory();
+    showBanner(workBanner, 'success', '二维码上传成功，使用页将优先展示手动二维码。');
+  } catch {
+    showBanner(workBanner, 'error', '网络错误，二维码上传失败。');
+  } finally {
+    uploadQrBtn.disabled = false;
+    qrUploadInput.value = '';
+  }
+}
+
 document.getElementById('loginForm').addEventListener('submit', (e) => {
   e.preventDefault();
   login();
@@ -391,6 +479,14 @@ document.querySelectorAll('[data-total]').forEach((btn) => {
 document.getElementById('createBtn').addEventListener('click', createVoucher);
 document.getElementById('logoutBtn').addEventListener('click', logout);
 document.getElementById('copyLinkBtn').addEventListener('click', copyLink);
+document.getElementById('uploadQrBtn').addEventListener('click', () => {
+  if (!latestVoucherId) {
+    showBanner(workBanner, 'error', '请先生成停车券，再上传二维码。');
+    return;
+  }
+  qrUploadInput.dataset.targetVoucher = latestVoucherId;
+  qrUploadInput.click();
+});
 document.getElementById('refreshHistoryBtn').addEventListener('click', () => loadHistory());
 document.getElementById('historySearchBtn').addEventListener('click', () => {
   historyState.q = historySearchInput.value.trim();
@@ -413,6 +509,19 @@ historyPrevBtn.addEventListener('click', () => {
 historyNextBtn.addEventListener('click', () => {
   historyState.page = Math.min(historyState.totalPages, historyState.page + 1);
   loadHistory();
+});
+qrUploadInput.addEventListener('change', () => {
+  const targetVoucher = qrUploadInput.dataset.targetVoucher || latestVoucherId;
+  const file = qrUploadInput.files && qrUploadInput.files[0];
+  uploadManualQrForVoucher(targetVoucher, file);
+});
+historyTableBody.addEventListener('click', (event) => {
+  const button = event.target instanceof HTMLElement ? event.target.closest('[data-upload-voucher]') : null;
+  if (!button) return;
+  const voucherId = button.getAttribute('data-upload-voucher') || '';
+  latestVoucherId = voucherId;
+  qrUploadInput.dataset.targetVoucher = voucherId;
+  qrUploadInput.click();
 });
 
 checkSession();
