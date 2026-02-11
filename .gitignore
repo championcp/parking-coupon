@@ -1,0 +1,8 @@
+node_modules/
+.env
+.DS_Store
+.codex/
+*.log
+data/*
+!data/.gitkeep
+问题跟踪.md

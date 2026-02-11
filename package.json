@@ -1,0 +1,21 @@
+{
+  "name": "parking-coupon",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "node scripts/internal-regression.mjs",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "express": "^5.2.1",
+    "fs-extra": "^11.3.3",
+    "multer": "^2.0.2",
+    "nanoid": "^5.1.6",
+    "qrcode": "^1.5.4"
+  }
+}

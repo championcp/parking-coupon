@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>停车券管理系统</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body class="app-body">
+
+  <!-- Login Screen -->
+  <div id="loginScreen" class="login-screen">
+    <div class="login-card">
+      <div class="login-brand">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="7" cy="15" r="1.5"/><circle cx="17" cy="15" r="1.5"/></svg>
+        <h2>停车券管理系统</h2>
+      </div>
+      <p class="login-sub">请登录管理员账号进入后台</p>
+      <form id="loginForm">
+        <label><span class="field-label">账号</span><input id="username" type="text" value="qzadmin" autocomplete="username" required/></label>
+        <label><span class="field-label">密码</span><input id="password" type="password" placeholder="请输入密码" autocomplete="current-password" required/></label>
+        <button class="btn btn-primary btn-login" type="submit" id="loginBtn">登录</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- App Shell -->
+  <div id="appShell" class="app-shell" style="display:none">
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="7" cy="15" r="1.5"/><circle cx="17" cy="15" r="1.5"/></svg>
+        <div><div class="sidebar-brand-title">停车券系统</div><div class="sidebar-brand-sub">管理后台</div></div>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="sidebar-item active" data-tab="overview">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span>仪表盘</span>
+        </button>
+        <button class="sidebar-item" data-tab="create">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+          <span>录入购买</span>
+        </button>
+        <button class="sidebar-item" data-tab="usages">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>使用记录</span>
+        </button>
+        <button class="sidebar-item" data-tab="history">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span>券管理</span>
+        </button>
+        <button class="sidebar-item" data-tab="logs">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span>操作日志</span>
+        </button>
+      </nav>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-user" id="sidebarUser">
+        <div class="sidebar-avatar" id="sidebarAvatar">Q</div>
+        <div class="sidebar-user-info"><div class="sidebar-user-name" id="sidebarUsername">qzadmin</div><div class="sidebar-user-role">管理员</div></div>
+        <button class="sidebar-logout" id="navLogout" title="退出登录">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+    </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Main -->
+    <div class="main-area">
+      <header class="topbar">
+        <button class="hamburger" id="hamburgerBtn" aria-label="菜单">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <h1 class="topbar-title" id="pageTitle">仪表盘</h1>
+      </header>
+
+      <div class="content-area">
+
+        <!-- 仪表盘 -->
+        <section id="tabOverview" class="tab-panel active">
+          <div class="stats-row">
+            <div class="stat-card stat-teal">
+              <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z"/></svg></div>
+              <div class="stat-body"><span class="stat-value" id="statRecords">-</span><span class="stat-label">购买记录数</span></div>
+            </div>
+            <div class="stat-card stat-green">
+              <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></div>
+              <div class="stat-body"><span class="stat-value" id="statTotalIssued">-</span><span class="stat-label">总购买次数</span></div>
+            </div>
+            <div class="stat-card stat-blue">
+              <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+              <div class="stat-body"><span class="stat-value" id="statUsed">-</span><span class="stat-label">总已用</span></div>
+            </div>
+            <div class="stat-card stat-amber">
+              <div class="stat-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+              <div class="stat-body"><span class="stat-value" id="statRemain">-</span><span class="stat-label">总剩余</span></div>
+            </div>
+          </div>
+
+          <div class="stats-row stats-row-secondary">
+            <div class="stat-card-sm"><span class="stat-sm-value" id="statTodayUsed">-</span><span class="stat-sm-label">今日使用</span></div>
+            <div class="stat-card-sm"><span class="stat-sm-value" id="statMonthUsed">-</span><span class="stat-sm-label">本月使用</span></div>
+            <div class="stat-card-sm"><span class="stat-sm-value" id="statYearUsed">-</span><span class="stat-sm-label">本年使用</span></div>
+            <div class="stat-card-sm"><span class="stat-sm-value" id="statDisabled">-</span><span class="stat-sm-label">已停用</span></div>
+          </div>
+
+          <!-- 近7天趋势 -->
+          <div class="card" style="margin-bottom:var(--sp-4)">
+            <h3 class="card-title" style="margin-bottom:var(--sp-3)">近7天使用趋势</h3>
+            <div class="trend-chart" id="trendChart"></div>
+          </div>
+
+          <div class="shortcut-grid">
+            <div class="shortcut-card" data-goto-tab="create">
+              <div class="shortcut-icon sc-teal"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg></div>
+              <div><h4>录入购买记录</h4><p>记录新购买的停车券次数及二维码</p></div>
+              <svg class="shortcut-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="shortcut-card" data-goto-tab="usages">
+              <div class="shortcut-icon sc-blue"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+              <div><h4>使用记录</h4><p>按日期查看停车券使用明细</p></div>
+              <svg class="shortcut-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+          </div>
+        </section>
+
+        <!-- 录入购买 -->
+        <section id="tabCreate" class="tab-panel">
+          <div class="card">
+            <h3 class="card-title">录入购买记录</h3>
+            <p class="muted" style="margin:0 0 var(--sp-4)">记录本次向物业购买的停车券次数，上传物业提供的固定二维码图片。</p>
+            <div class="form-section" style="max-width:520px">
+              <label><span class="field-label">购买次数（必填）</span><input id="createTotal" type="number" min="1" max="9999" placeholder="例如：100" required/></label>
+              <div class="upload-area" id="uploadArea">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <p><b>点击选择二维码图片</b> 或拖拽到此处</p>
+                <p class="muted" style="font-size:12px;margin:4px 0 0">支持 PNG / JPG / WEBP，仅一张</p>
+                <input id="createFileInput" type="file" accept="image/png,image/jpeg,image/webp" style="display:none"/>
+              </div>
+              <div id="filePreview" style="display:none" class="file-preview-item">
+                <span id="filePreviewName" class="file-preview-name"></span>
+                <button class="file-preview-remove" id="filePreviewRemove" type="button">&times;</button>
+              </div>
+              <label><span class="field-label">备注（可选）</span><input id="createNote" type="text" placeholder="例如：XX物业第3批" maxlength="200"/></label>
+              <button class="btn btn-primary" id="createBtn" type="button" style="width:100%" disabled>录入购买记录</button>
+            </div>
+          </div>
+          <div class="card mt-lg" id="createResultCard" style="display:none">
+            <h3 class="card-title">录入结果</h3>
+            <p id="createResultText"></p>
+          </div>
+        </section>
+
+        <!-- 使用记录 -->
+        <section id="tabUsages" class="tab-panel">
+          <div class="card">
+            <div class="date-filter-bar">
+              <div class="date-shortcuts">
+                <button class="btn btn-outline btn-sm date-shortcut active" data-range="today">今日</button>
+                <button class="btn btn-outline btn-sm date-shortcut" data-range="week">本周</button>
+                <button class="btn btn-outline btn-sm date-shortcut" data-range="month">本月</button>
+                <button class="btn btn-outline btn-sm date-shortcut" data-range="year">本年</button>
+                <button class="btn btn-outline btn-sm date-shortcut" data-range="all">全部</button>
+              </div>
+              <div class="date-range-picker">
+                <input id="usageStartDate" type="date" class="filter-select"/>
+                <span class="muted">至</span>
+                <input id="usageEndDate" type="date" class="filter-select"/>
+                <button class="btn btn-primary btn-sm" id="usageQueryBtn">查询</button>
+                <button class="btn btn-outline btn-sm" id="usageExportBtn">导出 CSV</button>
+              </div>
+            </div>
+
+            <div class="summary-row">
+              <div class="summary-chip"><span class="muted">所选期间使用</span><b id="usageSumTotal">0</b><span class="muted">次</span></div>
+            </div>
+
+            <div class="table-wrap desktop-only">
+              <table class="data-table">
+                <thead><tr><th>使用时间</th><th>关联记录号</th><th>来源</th></tr></thead>
+                <tbody id="usageTableBody"></tbody>
+              </table>
+            </div>
+            <div id="usageCardList" class="voucher-card-list mobile-only"></div>
+
+            <div class="pagination-bar">
+              <span class="muted" id="usagePageInfo">第 1 / 1 页</span>
+              <div class="pagination-right">
+                <button class="btn btn-outline btn-sm" id="usagePrevBtn" type="button">上一页</button>
+                <button class="btn btn-outline btn-sm" id="usageNextBtn" type="button">下一页</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 券管理 -->
+        <section id="tabHistory" class="tab-panel">
+          <div class="card">
+            <div class="filter-bar">
+              <input id="historySearchInput" type="text" placeholder="搜索记录号或备注…" class="filter-input"/>
+              <select id="historyStatusFilter" class="filter-select">
+                <option value="">全部状态</option>
+                <option value="active">活跃</option>
+                <option value="disabled">已停用</option>
+              </select>
+              <button class="btn btn-primary btn-sm" id="historySearchBtn" type="button">查询</button>
+              <button class="btn btn-outline btn-sm" id="refreshHistoryBtn" type="button">刷新</button>
+              <button class="btn btn-outline btn-sm" id="exportCsvBtn" type="button">导出 CSV</button>
+            </div>
+            <div class="summary-row">
+              <div class="summary-chip"><span class="muted">总购买</span><b id="sumIssued">0</b><span class="muted">次</span></div>
+              <div class="summary-chip"><span class="muted">总已用</span><b id="sumUsed">0</b><span class="muted">次</span></div>
+              <div class="summary-chip"><span class="muted">总剩余</span><b id="sumRemain">0</b><span class="muted">次</span></div>
+            </div>
+            <div class="table-wrap desktop-only">
+              <table class="data-table">
+                <thead><tr><th>记录号</th><th>购买次数</th><th>已用</th><th>剩余</th><th>状态</th><th>备注</th><th>操作</th></tr></thead>
+                <tbody id="historyTableBody"></tbody>
+              </table>
+            </div>
+            <div id="historyCardList" class="voucher-card-list mobile-only"></div>
+            <div class="pagination-bar">
+              <div class="pagination-left">
+                <select id="historyPageSize" class="filter-select" style="width:auto">
+                  <option value="10">10 条/页</option><option value="20">20 条/页</option><option value="50">50 条/页</option>
+                </select>
+                <span class="muted" id="historyPageInfo">第 1 / 1 页</span>
+              </div>
+              <div class="pagination-right">
+                <button class="btn btn-outline btn-sm" id="historyPrevBtn" type="button">上一页</button>
+                <button class="btn btn-outline btn-sm" id="historyNextBtn" type="button">下一页</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 操作日志 -->
+        <section id="tabLogs" class="tab-panel">
+          <div class="card">
+            <div class="filter-bar">
+              <select id="logTypeFilter" class="filter-select">
+                <option value="">全部类型</option>
+                <option value="ADMIN_LOGIN">管理员登录</option>
+                <option value="ADMIN_LOGOUT">管理员登出</option>
+                <option value="CREATE">录入购买</option>
+                <option value="WEBHOOK_USE">物业API回调</option>
+                <option value="MANUAL_USE">手动记录使用</option>
+                <option value="ADJUST">修正次数</option>
+                <option value="UPDATE">更新记录</option>
+                <option value="DISABLE">停用</option>
+              </select>
+              <input id="logVoucherFilter" type="text" placeholder="按记录号筛选" class="filter-input" style="max-width:220px"/>
+              <button class="btn btn-primary btn-sm" id="logSearchBtn" type="button">筛选</button>
+              <button class="btn btn-outline btn-sm" id="logRefreshBtn" type="button">刷新</button>
+            </div>
+            <div class="table-wrap desktop-only">
+              <table class="data-table">
+                <thead><tr><th>时间</th><th>类型</th><th>记录号</th><th>IP</th><th>详情</th></tr></thead>
+                <tbody id="logTableBody"></tbody>
+              </table>
+            </div>
+            <div id="logCardList" class="mobile-only"></div>
+            <div class="pagination-bar">
+              <span class="muted" id="logPageInfo">第 1 / 1 页</span>
+              <div class="pagination-right">
+                <button class="btn btn-outline btn-sm" id="logPrevBtn" type="button">上一页</button>
+                <button class="btn btn-outline btn-sm" id="logNextBtn" type="button">下一页</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Voucher Detail Modal -->
+  <div class="modal-overlay" id="detailModal" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalTitle">购买记录详情</h3>
+        <button class="modal-close" id="modalClose">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody"><div class="skeleton skeleton-card"></div></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-sm" id="modalSimulateUse">模拟使用 -1</button>
+        <button class="btn btn-danger btn-sm" id="modalDisable">停用</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>
